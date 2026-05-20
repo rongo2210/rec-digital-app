@@ -102,8 +102,12 @@ const totalM2 = items.reduce((acc, item) => {
   const colorTexto: any = [30, 41, 59];
 
   // HEADER
-  doc.setFillColor(...colorPrincipal);
-  doc.rect(0, 0, 210, 35, "F");
+doc.setFillColor(
+  colorPrincipal[0],
+  colorPrincipal[1],
+  colorPrincipal[2]
+);  
+doc.rect(0, 0, 210, 35, "F");
 
   const logo = new Image();
   logo.src = "/logo-rec.png";
@@ -114,7 +118,11 @@ const totalM2 = items.reduce((acc, item) => {
   doc.text("Sistema profesional de presupuestos", 20, 31);
 
   // DATOS EMPRESA
-  doc.setTextColor(...colorTexto);
+  doc.setTextColor(
+  colorTexto[0],
+  colorTexto[1],
+  colorTexto[2]
+);
   doc.setFontSize(11);
 
   doc.text("Direccion: Martin Coronado, Buenos Aires", 20, 48);
@@ -150,12 +158,20 @@ const totalM2 = items.reduce((acc, item) => {
     const alturaExtra = (descripcion.length - 1) * 6;
 
     // CAJA
-    doc.setDrawColor(...colorSecundario);
+    doc.setDrawColor(
+  colorSecundario[0],
+  colorSecundario[1],
+  colorSecundario[2]
+);
     doc.setLineWidth(0.5);
     doc.roundedRect(15, y - 8, 180, 42 + alturaExtra, 4, 4);
 
     // TITULO
-    doc.setTextColor(...colorPrincipal);
+    doc.setTextColor(
+  colorPrincipal[0],
+  colorPrincipal[1],
+  colorPrincipal[2]
+);
     doc.setFont("helvetica", "bold");
     doc.setFontSize(14);
     doc.text(`Producto ${index + 1}`, 20, y);
