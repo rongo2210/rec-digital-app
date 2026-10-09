@@ -26,6 +26,16 @@ Estructura: 0,
 };
 
 const [cliente, setCliente] = useState("");
+const [numeroPresupuesto, setNumeroPresupuesto] = useState("");
+const [fechaPresupuesto, setFechaPresupuesto] = useState(() => {
+  const hoy = new Date();
+  const local = new Date(hoy.getTime() - hoy.getTimezoneOffset() * 60000);
+  return local.toISOString().slice(0, 10);
+});
+const fechaParaPDF = (fecha: string) => {
+  const partes = fecha.split("-");
+  return partes.length === 3 ? `${partes[2]}/${partes[1]}/${partes[0]}` : fecha;
+};
 const [mantenimientoOferta, setMantenimientoOferta] = useState("30 días");
 const [tiempoEntrega, setTiempoEntrega] = useState("5 días");
 const [observaciones, setObservaciones] = useState("");
@@ -306,12 +316,19 @@ const generarPDF = async () => {
     const altoPagina = doc.internal.pageSize.getHeight();
     const anchoPagina = doc.internal.pageSize.getWidth();
     const margen = 15;
-    const pie = () => {
+    const pie = (pagina: number, paginas: number) => {
       doc.setFont("helvetica", "normal");
       doc.setTextColor(110, 110, 110);
       doc.setFontSize(9);
       doc.text("Gracias por elegir REC DIGITAL", margen, altoPagina - 10);
-      doc.text(`Página ${doc.getNumberOfPages()}`, anchoPagina - margen, altoPagina - 10, { align: "right" });
+      doc.text(`Página ${pagina} de ${paginas}`, anchoPagina - margen, altoPagina - 10, { align: "right" });
+    };
+    const datosPresupuesto = (yPos: number) => {
+      doc.setTextColor(...negro);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      doc.text(`PRESUPUESTO N°: ${numeroPresupuesto.trim() || "Sin número"}`, 20, yPos);
+      doc.text(`Fecha: ${fechaParaPDF(fechaPresupuesto)}`, anchoPagina - 20, yPos, { align: "right" });
     };
     const encabezado = async () => {
       doc.setFillColor(0, 0, 0);
@@ -336,28 +353,45 @@ const generarPDF = async () => {
       doc.text("Sistema profesional de presupuestos", 20, 31);
     };
     await encabezado();
+    datosPresupuesto(43);
     doc.setTextColor(...negro);
     doc.setFont("helvetica", "normal");
     doc.setFontSize(10);
-    doc.text("Dirección: Martín Coronado, Buenos Aires", 20, 45);
-    doc.text("WhatsApp: 11-3657-2382", 20, 51);
-    doc.text("CUIT: 20-93920334-7", 20, 57);
-    doc.text("Instagram: @recdigital1", 20, 63);
+    doc.text("Dirección: Martín Coronado, Buenos Aires", 20, 52);
+    doc.text("WhatsApp: 11-3657-2382", 20, 58);
+    doc.text("CUIT: 20-93920334-7", 20, 64);
+    doc.text("Instagram: @recdigital1", 20, 70);
     doc.setFont("helvetica", "bold");
     doc.setFontSize(12);
     const clienteLineas: string[] = doc.splitTextToSize(`Cliente: ${cliente || "-"}`, 170);
-    doc.text(clienteLineas, 20, 75);
-    let y = 83 + (clienteLineas.length - 1) * 5;
+    doc.text(clienteLineas, 20, 82);
+    let y = 90 + (clienteLineas.length - 1) * 5;
     const nuevaPagina = async () => {
-      pie();
       doc.addPage();
       await encabezado();
-      y = 43;
+      datosPresupuesto(43);
+      y = 53;
     };
     const asegurarEspacio = async (alto: number) => {
       if (y + alto > altoPagina - 19) await nuevaPagina();
     };
+    // Estimamos el bloque final para evitar una segunda página casi vacía.
+    const observacionLineasPrevias: string[] = observaciones.trim()
+      ? doc.splitTextToSize(observaciones.trim(), 168) : [];
+    const altoFinalPrevisto = 12 + 38 + 22 + (observacionLineasPrevias.length ? 9 + observacionLineasPrevias.length * 5 : 0);
+    const altoItems = items.map((item: any) => {
+      const lineas: string[] = doc.splitTextToSize(`Descripción: ${item.descripcion?.trim() || "Sin descripción adicional"}`, 165);
+      return 13 + lineas.length * 4.8 + (item.modoCalculo === "m2" ? 28 : 21) + 6;
+    });
+    // Si el último producto cabe junto con el resumen en una nueva página,
+    // lo trasladamos para repartir mejor el contenido entre ambas hojas.
+    const alturaTodos = altoItems.reduce((a: number, b: number) => a + b, 0);
+    const equilibrarUltimo = items.length > 1 &&
+      y + alturaTodos + altoFinalPrevisto > altoPagina - 19 &&
+      y + alturaTodos - altoItems[altoItems.length - 1] <= altoPagina - 19 &&
+      53 + altoItems[altoItems.length - 1] + altoFinalPrevisto <= altoPagina - 19;
     for (const [index, item] of items.entries()) {
+      if (equilibrarUltimo && index === items.length - 1) await nuevaPagina();
       const esM2 = item.modoCalculo === "m2";
       const cantidad = convertirNumero(item.cantidad);
       const m2Unidad = calcularM2(item.ancho, item.alto);
@@ -433,8 +467,13 @@ const generarPDF = async () => {
       doc.setFont("helvetica", "normal");
       doc.text(observacionLineas, 20, y + 29);
     }
-    pie();
-    doc.save("presupuesto-rec-digital.pdf");
+    const paginas = doc.getNumberOfPages();
+    for (let pagina = 1; pagina <= paginas; pagina++) {
+      doc.setPage(pagina);
+      pie(pagina, paginas);
+    }
+    const sufijo = numeroPresupuesto.trim().replace(/[^a-zA-Z0-9_-]/g, "-");
+    doc.save(`presupuesto-rec-digital${sufijo ? `-${sufijo}` : ""}.pdf`);
   } catch (error) {
     console.error("Error al generar el PDF:", error);
     alert("No se pudo generar el PDF. Revisá la consola del navegador para ver el detalle.");
@@ -458,6 +497,19 @@ Sistema REC DIGITAL
 Precio configurado: <strong>$30.000</strong> por metro cuadrado
 </div>
 
+{/* DATOS DEL PRESUPUESTO */}
+<div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-4">
+  <div>
+    <label className="block mb-2 text-sm text-slate-300">Número de presupuesto (editable)</label>
+    <input type="text" value={numeroPresupuesto} onChange={(e) => setNumeroPresupuesto(e.target.value)}
+      placeholder="Ej: 000001" className="w-full px-4 py-3 rounded-2xl bg-black border border-white/10" />
+  </div>
+  <div>
+    <label className="block mb-2 text-sm text-slate-300">Fecha del presupuesto (editable)</label>
+    <input type="date" value={fechaPresupuesto} onChange={(e) => setFechaPresupuesto(e.target.value)}
+      className="w-full px-4 py-3 rounded-2xl bg-black border border-white/10" />
+  </div>
+</div>
 {/* CLIENTE */}
 <div className="mt-8">
 
