@@ -297,292 +297,127 @@ return letras.trim();
 
 }
 const generarPDF = async () => {
+  try {
+    const doc = new jsPDF();
+    const azul: [number, number, number] = [6, 182, 212];
+    const negro: [number, number, number] = [30, 41, 59];
+    const margen = 15;
+    const anchoPagina = doc.internal.pageSize.getWidth();
+    const altoPagina = doc.internal.pageSize.getHeight();
 
-const doc = new jsPDF();
+    const encabezado = async () => {
+      doc.setFillColor(0, 0, 0);
+      doc.rect(0, 0, anchoPagina, 35, "F");
+      // El PDF se descarga incluso si el logo no está disponible.
+      try {
+        const logo = new Image();
+        logo.src = "/logo-rec.png";
+        await new Promise<void>((resolve, reject) => {
+          if (logo.complete) {
+            logo.naturalWidth > 0 ? resolve() : reject(new Error("Logo no disponible"));
+          } else {
+            logo.onload = () => resolve();
+            logo.onerror = () => reject(new Error("Logo no disponible"));
+          }
+        });
+        doc.addImage(logo, "PNG", 15, 6, 55, 22);
+      } catch {
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(19);
+        doc.setTextColor(255, 255, 255);
+        doc.text("REC DIGITAL", 20, 19);
+      }
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10);
+      doc.setTextColor(255, 255, 255);
+      doc.text("Sistema profesional de presupuestos", 20, 31);
+    };
 
-// COLORES
-const colorPrincipal = [0, 0, 0];
-const colorSecundario = [6, 182, 212];
-const colorTexto = [30, 41, 59];
+    const pie = () => {
+      doc.setTextColor(120, 120, 120);
+      doc.setFontSize(9);
+      doc.text("Gracias por elegir REC DIGITAL", 20, altoPagina - 10);
+    };
 
-// HEADER
-doc.setFillColor(
-colorPrincipal[0],
-colorPrincipal[1],
-colorPrincipal[2]
-);
+    await encabezado();
+    doc.setTextColor(...negro);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(11);
+    doc.text("Direccion: Martin Coronado, Buenos Aires", 20, 48);
+    doc.text("WhatsApp: 11-3657-2382", 20, 55);
+    doc.text("CUIT: 20-93920334-7", 20, 62);
+    doc.text("Instagram: @recdigital1", 20, 69);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(13);
+    const clienteLineas: string[] = doc.splitTextToSize(`Cliente: ${cliente || "-"}`, 170);
+    doc.text(clienteLineas, 20, 85);
+    let y = 98 + (clienteLineas.length - 1) * 6;
 
-doc.rect(0, 0, 210, 35, "F");
+    for (const [index, item] of items.entries()) {
+      const metros = calcularM2(item.ancho, item.alto);
+      const subtotal = item.modoCalculo === "m2"
+        ? calcularPrecio(item.ancho, item.alto, item.cantidad, item.precio)
+        : convertirNumero(item.precio) * convertirNumero(item.cantidad);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10);
+      const descripcionTexto: string[] = doc.splitTextToSize(
+        `Descripcion: ${item.descripcion || "-"}`, 166
+      );
+      const altura = Math.max(43, 15 + descripcionTexto.length * 5 + 17);
+      if (y + altura > altoPagina - 30) {
+        pie();
+        doc.addPage();
+        await encabezado();
+        y = 45;
+      }
+      doc.setDrawColor(...azul);
+      doc.setLineWidth(0.5);
+      // roundedRect requiere x, y, ancho, alto, radioX, radioY y estilo.
+      doc.roundedRect(margen, y, 180, altura, 4, 4, "S");
+      doc.setTextColor(...negro);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(13);
+      doc.text(`Producto ${index + 1}`, 20, y + 9);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10);
+      doc.text(descripcionTexto, 20, y + 16);
+      const detalleY = y + 16 + descripcionTexto.length * 5 + 2;
+      if (item.modoCalculo === "m2") {
+        doc.text(`Medidas: ${item.ancho} m x ${item.alto} m`, 20, detalleY);
+        doc.text(`Metros cuadrados: ${metros.toFixed(2)} m2`, 20, detalleY + 6);
+      } else {
+        doc.text(`Cantidad: ${item.cantidad}`, 20, detalleY);
+        doc.text(`Precio unitario: $${convertirNumero(item.precio).toLocaleString("es-AR")}`, 20, detalleY + 6);
+      }
+      doc.setFont("helvetica", "bold");
+      doc.text(`Subtotal: $${subtotal.toLocaleString("es-AR")}`, 110, detalleY + 6);
+      y += altura + 9;
+    }
 
-const logo = new Image();
-logo.src = "/logo-rec.png";
-try {
-  await new Promise<void>((resolve, reject) => {
-    logo.onload = () => resolve();
-    logo.onerror = () => reject(new Error("No se pudo cargar el logo"));
-  });
-} catch {
-  alert("No se pudo cargar el logo del presupuesto.");
-  return;
-}
-
-doc.addImage(
-logo,
-"PNG",
-15,
-6,
-55,
-22
-);
-
-doc.setTextColor(255, 255, 255);
-
-doc.setFontSize(11);
-doc.setFont("helvetica", "normal");
-
-doc.text(
-"Sistema profesional de presupuestos",
-20,
-31
-);
-// LOGO / TITULO
-
-// DATOS EMPRESA
-doc.setTextColor(
-colorTexto[0],
-colorTexto[1],
-colorTexto[2]
-);
-
-doc.setFontSize(11);
-
-doc.text(
-"Direccion: Martin Coronado, Buenos Aires",
-20,
-48
-);
-
-doc.text(
-"WhatsApp: 11-3657-2382",
-20,
-55
-);
-
-doc.text(
-"CUIT: 20-93920334-7",
-20,
-62
-);
-
-doc.text(
-"Instagram: @recdigital1",
-20,
-69
-);
-
-// CLIENTE
-doc.setFillColor(245, 245, 245);
-
-doc.roundedRect(
-15,
-180, 
-20, 
-4, 
-4, 
-"F"
-);
-
-doc.setFont("helvetica", "bold");
-doc.setFontSize(13);
-
-doc.text(
-`Cliente: ${cliente || "-"}`,
-20, 
-90 
-);
-
-let y = 115;
-
-// PRODUCTOS
-items.forEach((item, index) => {
-
-const metros =
-calcularM2(
-item.ancho,
-item.alto
-);
-
-const subtotal =
-item.modoCalculo === "m2"
-? calcularPrecio(
-item.ancho, 
-item.alto, 
-item.cantidad, 
-item.precio 
-)
-
-: item.precio * item.cantidad;
-
-// CARD
-doc.setDrawColor(
-colorSecundario[0],
-colorSecundario[1],
-colorSecundario[2]
-);
-
-doc.setLineWidth(0.5);
-const descripcionTexto = doc.splitTextToSize(
-  `Descripcion: ${item.descripcion || "-"}`,
-  160
-);
-const alturaExtra = (descripcionTexto.length - 1) * 6;
-
-doc.roundedRect(
-15,
-y - 8,
-180,
-42 + alturaExtra,
-4,
-4
-);
-
-// TITULO PRODUCTO
-doc.setTextColor(
-colorPrincipal[0],
-colorPrincipal[1],
-colorPrincipal[2]
-);
-
-doc.setFont("helvetica", "bold");
-doc.setFontSize(14);
-
-doc.text(
-`Producto ${index + 1}`,
-20,
-y
-);
-
-// TEXTO
-doc.setTextColor(
-colorTexto[0],
-colorTexto[1],
-colorTexto[2]
-);
-
-doc.setFont("helvetica", "normal");
-doc.setFontSize(11);
-
-doc.text(
-descripcionTexto,
-20,
-y + 8
-);
-
-if (item.modoCalculo === "m2") {
-
-doc.text(
-`Medidas: ${item.ancho}m x ${item.alto}m`,
-20,
-y + 16
-);
-
-doc.text(
-`Metros cuadrados: ${metros.toFixed(2)} m²`,
-20,
-y + 24
-);
-
-doc.text(
-`Subtotal: $${subtotal.toLocaleString("es-AR")}`,
-110,
-y + 24
-);
-
-} else {
-
-doc.text(
-`Cantidad: ${item.cantidad}`,
-20,
-y + 16
-);
-
-doc.text(
-`Precio unitario: $${item.precio.toLocaleString("es-AR")}`,
-20,
-y + 24
-);
-
-doc.text(
-`Subtotal: $${subtotal.toLocaleString("es-AR")}`,
-110,
-y + 24
-);
-
-}
-
-y += 52 + alturaExtra;
-
-});
-
-// TOTAL FINAL
-doc.setFillColor(
-colorSecundario[0],
-colorSecundario[1],
-colorSecundario[2]
-);
-
-doc.roundedRect(
-15,
-y,
-180,
-25,
-5,
-5,
-"F"
-);
-
-doc.setTextColor(255, 255, 255);
-
-doc.setFont("helvetica", "bold");
-doc.setFontSize(20);
-
-doc.text(
-`TOTAL: $${total.toLocaleString("es-AR", {
-minimumFractionDigits: 2,
-maximumFractionDigits: 2,
-})}`,
-20,
-y + 16
-);
-const totalEntero = Math.floor(total);
-
-const centavos = Math.round(
-(total - totalEntero) * 100
-)
-.toString()
-.padStart(2, "0");
-
-doc.setFontSize(11);
-doc.setFont("helvetica", "normal");
-
-doc.text(
-`Son pesos: ${numeroALetras(totalEntero)} con ${centavos}/100`,
-20,
-y + 23
-);
-// FOOTER
-doc.setTextColor(120, 120, 120);
-
-doc.setFontSize(10);
-
-doc.text(
-"Gracias por elegir REC DIGITAL",
-20,
-285
-);
-
-doc.save("presupuesto-rec-digital.pdf");
-
+    if (y + 37 > altoPagina - 17) {
+      pie();
+      doc.addPage();
+      await encabezado();
+      y = 45;
+    }
+    doc.setFillColor(...azul);
+    doc.roundedRect(15, y, 180, 32, 5, 5, "F");
+    doc.setTextColor(255, 255, 255);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(18);
+    doc.text(`TOTAL: $${total.toLocaleString("es-AR", {minimumFractionDigits: 2, maximumFractionDigits: 2})}`, 20, y + 13);
+    const entero = Math.floor(total);
+    const centavos = Math.round((total - entero) * 100).toString().padStart(2, "0");
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    const letras: string[] = doc.splitTextToSize(`Son pesos: ${numeroALetras(entero)} con ${centavos}/100`, 165);
+    doc.text(letras, 20, y + 20);
+    pie();
+    doc.save("presupuesto-rec-digital.pdf");
+  } catch (error) {
+    console.error("Error al generar el PDF:", error);
+    alert("No se pudo generar el PDF. Revisá la consola del navegador para ver el detalle.");
+  }
 };
 
 return (
