@@ -26,6 +26,9 @@ Estructura: 0,
 };
 
 const [cliente, setCliente] = useState("");
+const [mantenimientoOferta, setMantenimientoOferta] = useState("30 días");
+const [tiempoEntrega, setTiempoEntrega] = useState("5 días");
+const [observaciones, setObservaciones] = useState("");
 
 const [items, setItems] = useState<any[]>([
 {
@@ -133,17 +136,16 @@ convertirNumero(cantidad)
 );
 };
 
-const total = items.reduce((acc, item) => {
-return (
-acc +
-calcularPrecio(
-item.ancho,
-item.alto,
-item.cantidad,
-item.precio
-)
-);
-}, 0);
+const subtotalItem = (item: any) => item.modoCalculo === "m2"
+  ? calcularPrecio(item.ancho, item.alto, item.cantidad, item.precio)
+  : convertirNumero(item.precio) * convertirNumero(item.cantidad);
+const metrosTotalesItem = (item: any) => item.modoCalculo === "m2"
+  ? calcularM2(item.ancho, item.alto) * convertirNumero(item.cantidad)
+  : 0;
+const total = items.reduce((acc, item) => acc + subtotalItem(item), 0);
+const totalMetros = items.reduce((acc, item) => acc + metrosTotalesItem(item), 0);
+const moneda = (n: number) => n.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const superficie = (n: number) => n.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 function numeroALetras(numero: number): string {
 
 const unidades = [
@@ -301,24 +303,25 @@ const generarPDF = async () => {
     const doc = new jsPDF();
     const azul: [number, number, number] = [6, 182, 212];
     const negro: [number, number, number] = [30, 41, 59];
-    const margen = 15;
-    const anchoPagina = doc.internal.pageSize.getWidth();
     const altoPagina = doc.internal.pageSize.getHeight();
-
+    const anchoPagina = doc.internal.pageSize.getWidth();
+    const margen = 15;
+    const pie = () => {
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(110, 110, 110);
+      doc.setFontSize(9);
+      doc.text("Gracias por elegir REC DIGITAL", margen, altoPagina - 10);
+      doc.text(`Página ${doc.getNumberOfPages()}`, anchoPagina - margen, altoPagina - 10, { align: "right" });
+    };
     const encabezado = async () => {
       doc.setFillColor(0, 0, 0);
       doc.rect(0, 0, anchoPagina, 35, "F");
-      // El PDF se descarga incluso si el logo no está disponible.
       try {
         const logo = new Image();
         logo.src = "/logo-rec.png";
         await new Promise<void>((resolve, reject) => {
-          if (logo.complete) {
-            logo.naturalWidth > 0 ? resolve() : reject(new Error("Logo no disponible"));
-          } else {
-            logo.onload = () => resolve();
-            logo.onerror = () => reject(new Error("Logo no disponible"));
-          }
+          if (logo.complete) logo.naturalWidth > 0 ? resolve() : reject(new Error("Logo no disponible"));
+          else { logo.onload = () => resolve(); logo.onerror = () => reject(new Error("Logo no disponible")); }
         });
         doc.addImage(logo, "PNG", 15, 6, 55, 22);
       } catch {
@@ -332,86 +335,104 @@ const generarPDF = async () => {
       doc.setTextColor(255, 255, 255);
       doc.text("Sistema profesional de presupuestos", 20, 31);
     };
-
-    const pie = () => {
-      doc.setTextColor(120, 120, 120);
-      doc.setFontSize(9);
-      doc.text("Gracias por elegir REC DIGITAL", 20, altoPagina - 10);
-    };
-
     await encabezado();
     doc.setTextColor(...negro);
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(11);
-    doc.text("Direccion: Martin Coronado, Buenos Aires", 20, 48);
-    doc.text("WhatsApp: 11-3657-2382", 20, 55);
-    doc.text("CUIT: 20-93920334-7", 20, 62);
-    doc.text("Instagram: @recdigital1", 20, 69);
+    doc.setFontSize(10);
+    doc.text("Dirección: Martín Coronado, Buenos Aires", 20, 45);
+    doc.text("WhatsApp: 11-3657-2382", 20, 51);
+    doc.text("CUIT: 20-93920334-7", 20, 57);
+    doc.text("Instagram: @recdigital1", 20, 63);
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(13);
+    doc.setFontSize(12);
     const clienteLineas: string[] = doc.splitTextToSize(`Cliente: ${cliente || "-"}`, 170);
-    doc.text(clienteLineas, 20, 85);
-    let y = 98 + (clienteLineas.length - 1) * 6;
-
-    for (const [index, item] of items.entries()) {
-      const metros = calcularM2(item.ancho, item.alto);
-      const subtotal = item.modoCalculo === "m2"
-        ? calcularPrecio(item.ancho, item.alto, item.cantidad, item.precio)
-        : convertirNumero(item.precio) * convertirNumero(item.cantidad);
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(10);
-      const descripcionTexto: string[] = doc.splitTextToSize(
-        `Descripcion: ${item.descripcion || "-"}`, 166
-      );
-      const altura = Math.max(43, 15 + descripcionTexto.length * 5 + 17);
-      if (y + altura > altoPagina - 30) {
-        pie();
-        doc.addPage();
-        await encabezado();
-        y = 45;
-      }
-      doc.setDrawColor(...azul);
-      doc.setLineWidth(0.5);
-      // roundedRect requiere x, y, ancho, alto, radioX, radioY y estilo.
-      doc.roundedRect(margen, y, 180, altura, 4, 4, "S");
-      doc.setTextColor(...negro);
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(13);
-      doc.text(`Producto ${index + 1}`, 20, y + 9);
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(10);
-      doc.text(descripcionTexto, 20, y + 16);
-      const detalleY = y + 16 + descripcionTexto.length * 5 + 2;
-      if (item.modoCalculo === "m2") {
-        doc.text(`Medidas: ${item.ancho} m x ${item.alto} m`, 20, detalleY);
-        doc.text(`Metros cuadrados: ${metros.toFixed(2)} m2`, 20, detalleY + 6);
-      } else {
-        doc.text(`Cantidad: ${item.cantidad}`, 20, detalleY);
-        doc.text(`Precio unitario: $${convertirNumero(item.precio).toLocaleString("es-AR")}`, 20, detalleY + 6);
-      }
-      doc.setFont("helvetica", "bold");
-      doc.text(`Subtotal: $${subtotal.toLocaleString("es-AR")}`, 110, detalleY + 6);
-      y += altura + 9;
-    }
-
-    if (y + 37 > altoPagina - 17) {
+    doc.text(clienteLineas, 20, 75);
+    let y = 83 + (clienteLineas.length - 1) * 5;
+    const nuevaPagina = async () => {
       pie();
       doc.addPage();
       await encabezado();
-      y = 45;
+      y = 43;
+    };
+    const asegurarEspacio = async (alto: number) => {
+      if (y + alto > altoPagina - 19) await nuevaPagina();
+    };
+    for (const [index, item] of items.entries()) {
+      const esM2 = item.modoCalculo === "m2";
+      const cantidad = convertirNumero(item.cantidad);
+      const m2Unidad = calcularM2(item.ancho, item.alto);
+      const m2Total = metrosTotalesItem(item);
+      const subtotal = subtotalItem(item);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9.5);
+      const descripcionLineas: string[] = doc.splitTextToSize(`Descripción: ${item.descripcion?.trim() || "Sin descripción adicional"}`, 165);
+      const alto = 13 + descripcionLineas.length * 4.8 + (esM2 ? 28 : 21);
+      await asegurarEspacio(alto + 6);
+      doc.setDrawColor(...azul);
+      doc.setLineWidth(0.4);
+      doc.roundedRect(margen, y, 180, alto, 3, 3, "S");
+      doc.setTextColor(...negro);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11);
+      doc.text(`Producto ${index + 1}  |  Tipo: ${item.tipo}`, 20, y + 8);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9.5);
+      doc.text(descripcionLineas, 20, y + 15);
+      let dy = y + 15 + descripcionLineas.length * 4.8 + 1;
+      doc.text(`Cantidad: ${cantidad.toLocaleString("es-AR")}`, 20, dy);
+      if (esM2) {
+        dy += 6;
+        doc.text(`Medidas por unidad: ${item.ancho} m x ${item.alto} m`, 20, dy);
+        dy += 6;
+        doc.text(`Superficie por unidad: ${superficie(m2Unidad)} m²`, 20, dy);
+        dy += 6;
+        doc.text(`Total de este producto: ${superficie(m2Total)} m²`, 20, dy);
+      } else {
+        dy += 6;
+        doc.text(`Precio por unidad: $${moneda(convertirNumero(item.precio))}`, 20, dy);
+      }
+      doc.setFont("helvetica", "bold");
+      doc.text(`Subtotal: $${moneda(subtotal)}`, 190, dy, { align: "right" });
+      y += alto + 6;
     }
+    // Bloque final compacto, con salto de página solo si realmente es necesario.
+    const observacionLineas: string[] = observaciones.trim()
+      ? doc.splitTextToSize(observaciones.trim(), 168) : [];
+    const altoCondiciones = 22 + (observacionLineas.length ? 9 + observacionLineas.length * 5 : 0);
+    const altoFinal = 12 + 32 + altoCondiciones;
+    await asegurarEspacio(altoFinal);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10);
+    doc.setTextColor(...negro);
+    doc.text(`TOTAL DE METROS CUADRADOS: ${superficie(totalMetros)} m²`, 20, y + 6);
+    y += 12;
     doc.setFillColor(...azul);
-    doc.roundedRect(15, y, 180, 32, 5, 5, "F");
+    doc.roundedRect(margen, y, 180, 32, 4, 4, "F");
     doc.setTextColor(255, 255, 255);
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(18);
-    doc.text(`TOTAL: $${total.toLocaleString("es-AR", {minimumFractionDigits: 2, maximumFractionDigits: 2})}`, 20, y + 13);
+    doc.setFontSize(17);
+    doc.text(`TOTAL: $${moneda(total)}`, 20, y + 12);
     const entero = Math.floor(total);
     const centavos = Math.round((total - entero) * 100).toString().padStart(2, "0");
     doc.setFont("helvetica", "normal");
     doc.setFontSize(9);
-    const letras: string[] = doc.splitTextToSize(`Son pesos: ${numeroALetras(entero)} con ${centavos}/100`, 165);
-    doc.text(letras, 20, y + 20);
+    const letras: string[] = doc.splitTextToSize(`Son pesos: ${numeroALetras(entero)} con ${centavos}/100`, 166);
+    doc.text(letras, 20, y + 19);
+    y += 38;
+    doc.setTextColor(...negro);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10);
+    doc.text("CONDICIONES COMERCIALES", 20, y);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9.5);
+    doc.text(`Mantenimiento de oferta: ${mantenimientoOferta || "No especificado"}`, 20, y + 7);
+    doc.text(`Tiempo de entrega: ${tiempoEntrega || "No especificado"}`, 20, y + 14);
+    if (observacionLineas.length) {
+      doc.setFont("helvetica", "bold");
+      doc.text("Observaciones:", 20, y + 23);
+      doc.setFont("helvetica", "normal");
+      doc.text(observacionLineas, 20, y + 29);
+    }
     pie();
     doc.save("presupuesto-rec-digital.pdf");
   } catch (error) {
@@ -458,19 +479,9 @@ className="w-full px-4 py-3 rounded-2xl bg-black border border-white/10"
 
 {items.map((item, index) => {
 
-const metrosCuadrados =
-calcularM2(
-item.ancho,
-item.alto
-);
+const metrosCuadrados = metrosTotalesItem(item);
 
-const subtotal =
-calcularPrecio(
-item.ancho, 
-item.alto, 
-item.cantidad, 
-item.precio 
-);
+const subtotal = subtotalItem(item);
 
 return (
 
@@ -679,7 +690,7 @@ className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-white/10 text-2
 Total m²
 </p>
 <p className="text-2xl font-black mt-1">
-{metrosCuadrados.toFixed(2)} m²
+{superficie(metrosCuadrados)} m²
 </p>
 
 </div>
@@ -704,6 +715,30 @@ ${subtotal.toLocaleString("es-AR")}
 
 })}
 
+</div>
+
+{/* CONDICIONES COMERCIALES */}
+<div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-4">
+  <div>
+    <label className="block mb-2 text-sm text-slate-300">Mantenimiento de oferta</label>
+    <input value={mantenimientoOferta} onChange={(e) => setMantenimientoOferta(e.target.value)}
+      className="w-full px-4 py-3 rounded-2xl bg-black border border-white/10" placeholder="Ej: 30 días" />
+  </div>
+  <div>
+    <label className="block mb-2 text-sm text-slate-300">Tiempo de entrega</label>
+    <input value={tiempoEntrega} onChange={(e) => setTiempoEntrega(e.target.value)}
+      className="w-full px-4 py-3 rounded-2xl bg-black border border-white/10" placeholder="Ej: 5 días" />
+  </div>
+</div>
+<div className="mt-5">
+  <label className="block mb-2 text-sm text-slate-300">Observaciones o aclaraciones (opcional)</label>
+  <textarea value={observaciones} onChange={(e) => setObservaciones(e.target.value)} rows={4}
+    placeholder="Condiciones particulares, detalles de instalación, aclaraciones, etc."
+    className="w-full px-4 py-3 rounded-2xl bg-black border border-white/10" />
+</div>
+<div className="mt-5 p-4 rounded-2xl bg-cyan-500/10 border border-cyan-500/20">
+  <span className="text-slate-300">Total de metros cuadrados: </span>
+  <strong className="text-cyan-300">{superficie(totalMetros)} m²</strong>
 </div>
 
 {/* BOTONES */}
